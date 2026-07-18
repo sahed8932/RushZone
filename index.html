@@ -228,7 +228,7 @@
       </div>
     </div>
 
-    <!-- Tab 3: Gift Code (Replaced Games Dashboard) -->
+    <!-- Tab 3: Gift Code -->
     <div id="tab-giftcode" class="hidden space-y-6 text-left">
       <div class="glass-card p-6 space-y-4">
         <div class="w-12 h-12 rounded-full bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
@@ -414,20 +414,44 @@
       });
     }
 
-    // Check Membership via TG Bot API
-    async function checkTelegramMembership(chatId, userId) {
-      if (!chatId || !CONFIG.telegramBotToken || CONFIG.telegramBotToken.includes("YOUR_BOT_TOKEN") || chatId.trim() === "") {
-        return true; 
-      }
-      try {
-        // Format chat id correctly (must start with @ or represent a private channel/group ID)
-        let formattedChatId = chatId.trim();
-        if (!formattedChatId.startsWith('-') && !formattedChatId.startsWith('@')) {
-          formattedChatId = `@${formattedChatId}`;
+    // Regex auto extraction helper to get public handles if chatId wasn't typed by the admin
+    function extractTelegramUsername(link) {
+      if (!link) return null;
+      const match = link.match(/(?:t\.me|telegram\.me)\/([a-zA-Z0-9_]{5,})/);
+      if (match && match[1]) {
+        if (match[1] !== 'joinchat' && !match[1].startsWith('+')) {
+          return '@' + match[1];
         }
-        const response = await fetch(`https://api.telegram.org/bot${CONFIG.telegramBotToken}/getChatMember?chat_id=${formattedChatId}&user_id=${userId}`);
+      }
+      return null;
+    }
+
+    // Check Membership via TG Bot API - Absolutely Strict Checking
+    async function checkTelegramMembership(chatId, userId, fallbackLink) {
+      let targetId = (chatId || "").trim();
+      
+      // Auto fallback to check public usernames from links if chat ID was left empty
+      if (!targetId && fallbackLink) {
+        const extracted = extractTelegramUsername(fallbackLink);
+        if (extracted) {
+          targetId = extracted;
+        }
+      }
+
+      // If configuration is empty, block entry as strict rule
+      if (!targetId || !CONFIG.telegramBotToken || CONFIG.telegramBotToken.includes("YOUR_BOT_TOKEN")) {
+        console.error("Critical: Telegram validation failed. Bot token or chat ID is misconfigured.");
+        return false; 
+      }
+
+      try {
+        if (!targetId.startsWith('-') && !targetId.startsWith('@')) {
+          targetId = `@${targetId}`;
+        }
+        const response = await fetch(`https://api.telegram.org/bot${CONFIG.telegramBotToken}/getChatMember?chat_id=${targetId}&user_id=${userId}`);
         const data = await response.json();
-        if (data.ok && ['member', 'administrator', 'creator'].includes(data.result.status)) {
+        
+        if (data.ok && data.result && ['member', 'administrator', 'creator'].includes(data.result.status)) {
           return true;
         }
         return false;
@@ -443,8 +467,8 @@
         const { count: joinCount } = await supabaseClient.from('mandatory_joins').select('*', { count: 'exact', head: true });
         if(joinCount === 0) {
           await supabaseClient.from('mandatory_joins').insert([
-            { title: "Payment Channel", type: "channel", link: "https://t.me/+QZeUpXfBxOoxYzA1", chat_id: "", sort_order: 1, required: true, visible: true },
-            { title: "Launch Channel", type: "channel", link: "https://t.me/+zf-BFqtUFyAwYjdl", chat_id: "", sort_order: 2, required: true, visible: true },
+            { title: "Official Telegram Channel", type: "channel", link: "https://t.me/RushZone_Channel", chat_id: "@RushZone_Channel", sort_order: 1, required: true, visible: true },
+            { title: "Payment Proof Group", type: "group", link: "https://t.me/RushZone_Payments", chat_id: "@RushZone_Payments", sort_order: 2, required: true, visible: true },
             { title: "Otp Receive Bot", type: "bot", link: "https://t.me/SHS_SMSHUB_bot", chat_id: "", sort_order: 3, required: true, visible: true }
           ]);
         }
@@ -691,7 +715,7 @@
       sessionStorage.setItem(`join_clicked_${id}`, 'true');
     }
 
-    // Verify Mandatory Joins Button Click
+    // Verify Mandatory Joins Button Click - Strict Checking
     async function verifyAllMandatoryJoins() {
       document.getElementById('loader').classList.remove('hidden');
       try {
@@ -700,15 +724,15 @@
         let allCleared = true;
 
         for (let item of items) {
-          // Strict Telegram Bot verification checking
-          if (item.chat_id && item.chat_id.trim() !== "") {
-            const isMember = await checkTelegramMembership(item.chat_id, currentUser.telegram_id);
+          // Strictly force Telegram Bot verification checking for channels & groups
+          if (item.type === 'channel' || item.type === 'group') {
+            const isMember = await checkTelegramMembership(item.chat_id, currentUser.telegram_id, item.link);
             if (!isMember) {
               allCleared = false;
               break;
             }
           } else {
-            // Click verification fallback (useful for external platforms)
+            // For bots, click tracking acts as check mechanism
             const clicked = sessionStorage.getItem(`join_clicked_${item.id}`);
             if (!clicked) {
               allCleared = false;
@@ -726,7 +750,7 @@
           document.getElementById('rules-notice-modal').classList.remove('hidden');
         } else {
           const stat = document.getElementById("verification-status");
-          stat.innerText = "ভুল ভেরিফিকেশন! দয়া করে প্রতিটি চ্যানেলে জয়েন করুন এবং পুনরায় চেষ্টা করুন।";
+          stat.innerText = "ভুল ভেরিফিকেশন! আপনি সবগুলো চ্যানেল বা গ্রুপে জয়েন করেননি। জয়েন সম্পন্ন করে পুনরায় চেষ্টা করুন।";
           stat.classList.remove("hidden");
         }
       } catch (err) {
@@ -808,9 +832,12 @@
       setTimeout(async () => {
         try {
           let success = true;
-          // If Chat ID is assigned to task, perform real getChatMember verify check
-          if(chatId && chatId.trim() !== '') {
-            success = await checkTelegramMembership(chatId, currentUser.telegram_id);
+          // Strictly verify if the task belongs to Telegram network (channel join/group join)
+          if(type === 'tg_join' || type === 'tg_group' || (chatId && chatId.trim() !== '')) {
+            success = await checkTelegramMembership(chatId, currentUser.telegram_id, link);
+          } else {
+            // Non telegram task bypass for social sites (Web URL clicks, YouTube subs, FB follows)
+            success = true;
           }
 
           if(success) {
@@ -828,7 +855,7 @@
             showToast(`টাস্ক সম্পন্ন হয়েছে! +${reward} BDT ব্যালেন্সে যোগ হলো।`);
             await syncSystemState();
           } else {
-            showToast("ভেরিফিকেশন ব্যর্থ হয়েছে! আপনি এখনো গ্রুপ/চ্যানেলে জয়েন করেননি।");
+            showToast("ভেরিফিকেশন ব্যর্থ হয়েছে! দয়া করে চ্যানেল বা গ্রুপটিতে অবশ্যই জয়েন করুন।");
           }
         } catch (e) {
           console.error(e);
