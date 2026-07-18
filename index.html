@@ -87,7 +87,7 @@
       </div>
 
       <div id="mandatory-list" class="space-y-3">
-        <!-- Dynanmic Mandatory Joins list -->
+        <!-- Dynamic Mandatory Joins list -->
       </div>
     </div>
 
@@ -132,8 +132,8 @@
   <!-- Header Panel (Hidden initially) -->
   <header id="app-header" class="hidden p-4 flex justify-between items-center glass-card border-t-0 border-x-0 rounded-none bg-black/20 sticky top-0 z-30">
     <div class="flex items-center space-x-1">
-      <div class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-white font-bold relative">
-        <span id="user-initials">U</span>
+      <div id="user-initials" class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-white font-bold relative overflow-hidden">
+        U
         <div id="vip-badge" class="hidden absolute -bottom-1 -right-1 bg-yellow-500 text-black text-[8px] font-bold px-1 rounded-full border border-black">VIP</div>
       </div>
       <div class="ml-3 text-left">
@@ -416,11 +416,16 @@
 
     // Check Membership via TG Bot API
     async function checkTelegramMembership(chatId, userId) {
-      if (!chatId || !CONFIG.telegramBotToken || CONFIG.telegramBotToken.includes("YOUR_BOT_TOKEN")) {
+      if (!chatId || !CONFIG.telegramBotToken || CONFIG.telegramBotToken.includes("YOUR_BOT_TOKEN") || chatId.trim() === "") {
         return true; 
       }
       try {
-        const response = await fetch(`https://api.telegram.org/bot${CONFIG.telegramBotToken}/getChatMember?chat_id=${chatId}&user_id=${userId}`);
+        // Format chat id correctly (must start with @ or represent a private channel/group ID)
+        let formattedChatId = chatId.trim();
+        if (!formattedChatId.startsWith('-') && !formattedChatId.startsWith('@')) {
+          formattedChatId = `@${formattedChatId}`;
+        }
+        const response = await fetch(`https://api.telegram.org/bot${CONFIG.telegramBotToken}/getChatMember?chat_id=${formattedChatId}&user_id=${userId}`);
         const data = await response.json();
         if (data.ok && ['member', 'administrator', 'creator'].includes(data.result.status)) {
           return true;
@@ -454,7 +459,7 @@
             { key: 'support_link', value: 'https://t.me/RushZone_Support' },
             { key: 'maintenance_mode', value: 'false' },
             { key: 'admin_password', value: 'admin123' },
-            { key: 'announcement', value: 'Welcome to WinFanti Earning Platform!' },
+            { key: 'announcement', value: 'Welcome to RushZone Earning Platform!' },
             { key: 'rules_notice', value: `১. কোনো প্রকার ফেক রেফার করা যাবে না। ফেক রেফার করলে অ্যাকাউন্ট ব্লক করা হবে।\n\n২. আমাদের অফিশিয়াল কাজগুলো সঠিক নিয়মে সম্পন্ন করতে হবে।\n\n৩. এখন যদি কোনো টাস্ক না থাকে, তাহলে আপনি বন্ধুদের রেফার করে আনলিমিটেড ইনকাম শুরু করুন।\n\n৪. পেমেন্ট ১০০% ভেরিফাই করা এবং দ্রুত সময়ে পেমেন্ট করা হয়।` }
           ];
           for(let item of defaults) {
@@ -464,6 +469,28 @@
       } catch (err) {
         console.error("Seeding operation failed: ", err);
       }
+    }
+
+    // Ban Screen Render
+    function renderBanScreen() {
+      const supportLink = cachedSettings['support_link'] || 'https://t.me/RushZone_Support';
+      document.body.innerHTML = `
+        <div class="min-h-screen flex flex-col items-center justify-center text-center p-6 bg-[#050814]">
+          <div class="p-4 bg-red-500/10 border border-red-500/20 rounded-full mb-4 animate-bounce">
+            <i data-lucide="shield-alert" class="w-16 h-16 text-red-500"></i>
+          </div>
+          <h1 class="text-2xl font-extrabold text-white">অ্যাক্সেস প্রত্যাখ্যান করা হয়েছে!</h1>
+          <p class="text-gray-400 max-w-sm mt-2 text-xs leading-relaxed">
+            একই ডিভাইস থেকে একাধিক অ্যাকাউন্ট লগইন অথবা নীতি পরিপন্থী কোনো কার্যকলাপ করার কারণে আপনার অ্যাকাউন্টটি স্থায়ীভাবে ব্লক করা হয়েছে।
+          </p>
+          <div class="mt-6 w-full max-w-xs">
+            <a href="${supportLink}" target="_blank" class="w-full py-3.5 rounded-xl bg-cyan-600/20 border border-cyan-500/30 flex items-center justify-center gap-2 text-cyan-300 text-xs font-bold hover:bg-cyan-600/30 transition-all">
+              <i data-lucide="message-circle" class="w-4 h-4"></i> কাস্টমার সাপোর্টে যোগাযোগ করুন
+            </a>
+          </div>
+        </div>
+      `;
+      lucide.createIcons();
     }
 
     // Sync state
@@ -491,12 +518,12 @@
         document.getElementById('support-anchor').href = cachedSettings['support_link'] || '#';
 
         // Load TG user dynamic profile parameters
-        let tgUser = { id: 123456789, first_name: "Demo User", username: "demo_user" };
+        let tgUser = { id: 82626796, first_name: "Demo User", username: "demo_user" };
         if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
           tgUser = window.Telegram.WebApp.initDataUnsafe.user;
         }
 
-        // Check Referral in URL
+        // Check Referral in URL (startapp parameter in mini-app deep links)
         let referrerId = null;
         if(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe.start_param) {
           referrerId = parseInt(window.Telegram.WebApp.initDataUnsafe.start_param);
@@ -506,6 +533,17 @@
         let { data: dbUser } = await supabaseClient.from('users').select('*').eq('telegram_id', tgUser.id).maybeSingle();
         const fingerprint = getDeviceFingerprint();
         
+        // Multi-Account Detection Check
+        let isMultiAccount = false;
+        const { data: duplicateFingerprints } = await supabaseClient.from('users')
+          .select('telegram_id')
+          .eq('device_fingerprint', fingerprint)
+          .neq('telegram_id', tgUser.id);
+        
+        if (duplicateFingerprints && duplicateFingerprints.length > 0) {
+          isMultiAccount = true;
+        }
+
         // Handle New Registration
         if (!dbUser) {
           const newUserReward = parseFloat(cachedSettings['new_user_reward'] || '2');
@@ -517,7 +555,8 @@
             balance: newUserReward,
             referred_by: referrerId,
             device_fingerprint: fingerprint,
-            vip_status: false
+            vip_status: false,
+            is_banned: isMultiAccount // Auto-ban multi account registration
           }).select().single();
 
           if(!error && data) {
@@ -534,13 +573,13 @@
               total_earnings: newUserReward,
               pending_withdraw: 0,
               task_earnings: 0,
-              is_banned: false,
+              is_banned: isMultiAccount,
               vip_status: false
             };
           }
 
-          // Apply Referral Reward if valid
-          if (referrerId && referrerId !== tgUser.id && !error) {
+          // Apply Referral Reward if valid and not cheating
+          if (referrerId && referrerId !== tgUser.id && !error && !isMultiAccount) {
             const { data: refUser } = await supabaseClient.from('users').select('*').eq('telegram_id', referrerId).maybeSingle();
             if (refUser && refUser.device_fingerprint !== fingerprint) {
               const refReward = parseFloat(cachedSettings['ref_reward'] || '2');
@@ -552,19 +591,31 @@
               }).eq('telegram_id', referrerId);
             }
           }
-          showWelcomeNotice(cachedSettings['announcement'] || "Welcome to our platform!");
+          if (!isMultiAccount) {
+            showWelcomeNotice(cachedSettings['announcement'] || "Welcome to our platform!");
+          }
         }
 
-        if (dbUser && dbUser.is_banned) {
-          document.body.innerHTML = `<div class="min-h-screen flex flex-col items-center justify-center text-center p-6 bg-slate-950"><i data-lucide="skull" class="w-16 h-16 text-red-500 mb-4 animate-bounce"></i><h1 class="text-2xl font-extrabold text-white">Access Denied</h1><p class="text-gray-400 max-w-sm mt-2 text-xs">Your account has been permanently suspended for violating safety policy guidelines.</p></div>`;
-          lucide.createIcons();
+        // Check if user is banned
+        if ((dbUser && dbUser.is_banned) || isMultiAccount) {
+          if (dbUser && !dbUser.is_banned) {
+            // Update ban state in DB for future logins
+            await supabaseClient.from('users').update({ is_banned: true }).eq('telegram_id', tgUser.id);
+          }
+          renderBanScreen();
           return;
         }
 
         currentUser = dbUser;
 
-        // Populate User UI Header & Tracking panel
-        document.getElementById('user-initials').innerText = (currentUser.first_name || 'U').substring(0, 2).toUpperCase();
+        // Populate User Dynamic profile photo if available in SDK
+        const initialsContainer = document.getElementById('user-initials');
+        if (tgUser.photo_url) {
+          initialsContainer.innerHTML = `<img src="${tgUser.photo_url}" class="w-full h-full object-cover rounded-full" alt="Profile" onerror="this.outerHTML='${(currentUser.first_name || 'U').substring(0, 2).toUpperCase()}'">`;
+        } else {
+          initialsContainer.innerText = (currentUser.first_name || 'U').substring(0, 2).toUpperCase();
+        }
+
         document.getElementById('user-fullname').innerText = currentUser.first_name;
         document.getElementById('user-tg-username').innerText = `@${currentUser.username || 'unknown'}`;
         document.getElementById('user-tg-id').innerText = `ID: ${currentUser.telegram_id}`;
@@ -576,8 +627,8 @@
         document.getElementById('dash-task').innerText = parseFloat(currentUser.task_earnings || 0).toFixed(2);
         document.getElementById('dash-pending').innerText = parseFloat(currentUser.pending_withdraw || 0).toFixed(2);
         
-        const botUsername = 'WinFantiEarningBot';
-        document.getElementById('ref-link').value = `https://t.me/${botUsername}?start=${currentUser.telegram_id}`;
+        // Dynamically fixed with correct direct Mini App deep link
+        document.getElementById('ref-link').value = `https://t.me/RushZone_Earning_bot/app?startapp=${currentUser.telegram_id}`;
 
         if(currentUser.vip_status) {
           const vipB = document.getElementById('vip-badge');
@@ -649,7 +700,7 @@
         let allCleared = true;
 
         for (let item of items) {
-          // If Chat ID is configured, we strictly check API. If not, we fall back to click tracking.
+          // Strict Telegram Bot verification checking
           if (item.chat_id && item.chat_id.trim() !== "") {
             const isMember = await checkTelegramMembership(item.chat_id, currentUser.telegram_id);
             if (!isMember) {
@@ -657,7 +708,7 @@
               break;
             }
           } else {
-            // Click verification fallback
+            // Click verification fallback (useful for external platforms)
             const clicked = sessionStorage.getItem(`join_clicked_${item.id}`);
             if (!clicked) {
               allCleared = false;
@@ -675,7 +726,7 @@
           document.getElementById('rules-notice-modal').classList.remove('hidden');
         } else {
           const stat = document.getElementById("verification-status");
-          stat.innerText = "দয়া করে প্রতিটি লিংক ওপেন করে জয়েন সম্পন্ন করুন!";
+          stat.innerText = "ভুল ভেরিফিকেশন! দয়া করে প্রতিটি চ্যানেলে জয়েন করুন এবং পুনরায় চেষ্টা করুন।";
           stat.classList.remove("hidden");
         }
       } catch (err) {
@@ -747,16 +798,17 @@
       }
     }
 
-    // Verify Task Click
+    // Verify Task Click (Strict checking with Telegram API)
     async function verifyTask(taskId, link, type, chatId) {
       window.open(link, '_blank');
-      showToast("Redirecting... verifying completion...");
+      showToast("ভেরিফাই করা হচ্ছে... ৫ সেকেন্ড অপেক্ষা করুন!");
       
       document.getElementById('loader').classList.remove('hidden');
 
       setTimeout(async () => {
         try {
           let success = true;
+          // If Chat ID is assigned to task, perform real getChatMember verify check
           if(chatId && chatId.trim() !== '') {
             success = await checkTelegramMembership(chatId, currentUser.telegram_id);
           }
@@ -773,10 +825,10 @@
               total_earnings: currentUser.total_earnings + reward
             }).eq('telegram_id', currentUser.telegram_id);
 
-            showToast(`Task Complete! +${reward} BDT earned.`);
+            showToast(`টাস্ক সম্পন্ন হয়েছে! +${reward} BDT ব্যালেন্সে যোগ হলো।`);
             await syncSystemState();
           } else {
-            showToast("Task verification failed. Make sure you completed the action.");
+            showToast("ভেরিফিকেশন ব্যর্থ হয়েছে! আপনি এখনো গ্রুপ/চ্যানেলে জয়েন করেননি।");
           }
         } catch (e) {
           console.error(e);
@@ -794,7 +846,7 @@
         const hoursPassed = (now - lastClaim) / (1000 * 60 * 60);
         if(hoursPassed < 24) {
           const hoursLeft = Math.ceil(24 - hoursPassed);
-          showToast(`Please wait ${hoursLeft} hours before claiming again.`);
+          showToast(`অনুগ্রহ করে ${hoursLeft} ঘণ্টা পর পুনরায় দাবি করুন।`);
           return;
         }
       }
