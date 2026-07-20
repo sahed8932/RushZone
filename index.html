@@ -326,7 +326,7 @@
         <p id="proof-task-instruction" class="text-gray-300 text-xs leading-relaxed whitespace-pre-line"></p>
       </div>
 
-      <!-- Live Go-Task Action Link (Opened only when user explicitly clicks inside modal) -->
+      <!-- Live Go-Task Action Link -->
       <div class="p-1">
         <button id="proof-go-task-btn" onclick="openTargetTaskLink()" class="w-full py-3 rounded-xl border border-dashed border-cyan-500 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-bold text-xs flex items-center justify-center gap-2 transition-all">
           <i data-lucide="external-link" class="w-4 h-4"></i> কাজের লিংকে যান (Go Task)
@@ -336,7 +336,7 @@
       <!-- Tutorial Instructions Box-Style Screenshots -->
       <div id="proof-tutorials-container" class="space-y-2 hidden">
         <p class="text-[10px] text-cyan-400 font-bold uppercase">টিউটোরিয়াল স্ক্রিনশট (যা দেখে কাজ বুঝবেন):</p>
-        <div id="proof-tutorials-list" class="grid grid-cols-3 gap-2">
+        <div id="proof-tutorials-list" class="grid grid-cols-5 gap-1.5">
           <!-- Custom Tutorial Boxes Rendered Dynamically -->
         </div>
       </div>
@@ -471,11 +471,10 @@
       return null;
     }
 
-    // Check Membership via TG Bot API - Absolutely Strict Checking
+    // Check Membership via TG Bot API
     async function checkTelegramMembership(chatId, userId, fallbackLink) {
       let targetId = (chatId || "").trim();
       
-      // Auto fallback to check public usernames from links if chat ID was left empty
       if (!targetId && fallbackLink) {
         const extracted = extractTelegramUsername(fallbackLink);
         if (extracted) {
@@ -483,7 +482,6 @@
         }
       }
 
-      // If configuration is empty, block entry as strict rule
       if (!targetId || !CONFIG.telegramBotToken || CONFIG.telegramBotToken.includes("YOUR_BOT_TOKEN")) {
         console.error("Critical: Telegram validation failed. Bot token or chat ID is misconfigured.");
         return false; 
@@ -591,7 +589,7 @@
           tgUser = window.Telegram.WebApp.initDataUnsafe.user;
         }
 
-        // Check Referral in URL (startapp parameter in mini-app deep links)
+        // Check Referral in URL
         let referrerId = null;
         if(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe.start_param) {
           referrerId = parseInt(window.Telegram.WebApp.initDataUnsafe.start_param);
@@ -624,7 +622,7 @@
             referred_by: referrerId,
             device_fingerprint: fingerprint,
             vip_status: false,
-            is_banned: isMultiAccount // Auto-ban multi account registration
+            is_banned: isMultiAccount
           }).select().single();
 
           if(!error && data) {
@@ -646,7 +644,7 @@
             };
           }
 
-          // Apply Referral Reward if valid and not cheating
+          // Apply Referral Reward
           if (referrerId && referrerId !== tgUser.id && !error && !isMultiAccount) {
             const { data: refUser } = await supabaseClient.from('users').select('*').eq('telegram_id', referrerId).maybeSingle();
             if (refUser && refUser.device_fingerprint !== fingerprint) {
@@ -667,7 +665,6 @@
         // Check if user is banned
         if ((dbUser && dbUser.is_banned) || isMultiAccount) {
           if (dbUser && !dbUser.is_banned) {
-            // Update ban state in DB for future logins
             await supabaseClient.from('users').update({ is_banned: true }).eq('telegram_id', tgUser.id);
           }
           renderBanScreen();
@@ -676,7 +673,7 @@
 
         currentUser = dbUser;
 
-        // Populate User Dynamic profile photo if available in SDK
+        // Populate User Dynamic profile photo
         const initialsContainer = document.getElementById('user-initials');
         if (tgUser.photo_url) {
           initialsContainer.innerHTML = `<img src="${tgUser.photo_url}" class="w-full h-full object-cover rounded-full" alt="Profile" onerror="this.outerHTML='${(currentUser.first_name || 'U').substring(0, 2).toUpperCase()}'">`;
@@ -695,7 +692,6 @@
         document.getElementById('dash-task').innerText = parseFloat(currentUser.task_earnings || 0).toFixed(2);
         document.getElementById('dash-pending').innerText = parseFloat(currentUser.pending_withdraw || 0).toFixed(2);
         
-        // Dynamically fixed with correct direct Mini App deep link
         document.getElementById('ref-link').value = `https://t.me/RushZone_Earning_bot/app?startapp=${currentUser.telegram_id}`;
 
         if(currentUser.vip_status) {
@@ -757,7 +753,7 @@
       sessionStorage.setItem(`join_clicked_${id}`, 'true');
     }
 
-    // Verify Mandatory Joins Button Click - Strict Checking
+    // Verify Mandatory Joins Button Click
     async function verifyAllMandatoryJoins() {
       document.getElementById('loader').classList.remove('hidden');
       try {
@@ -766,7 +762,6 @@
         let allCleared = true;
 
         for (let item of items) {
-          // Strictly force Telegram Bot verification checking for channels & groups
           if (item.type === 'channel' || item.type === 'group') {
             const isMember = await checkTelegramMembership(item.chat_id, currentUser.telegram_id, item.link);
             if (!isMember) {
@@ -774,7 +769,6 @@
               break;
             }
           } else {
-            // For bots, click tracking acts as check mechanism
             const clicked = sessionStorage.getItem(`join_clicked_${item.id}`);
             if (!clicked) {
               allCleared = false;
@@ -786,7 +780,6 @@
         document.getElementById('loader').classList.add('hidden');
 
         if (allCleared || items.length === 0) {
-          // Trigger Rules Modal Notice
           const noticeText = cachedSettings['rules_notice'] || "কোনো প্রকার ফেক রেফার করা যাবে না। নিয়ম মেনে কাজ করুন।";
           document.getElementById('rules-notice-text').innerText = noticeText;
           document.getElementById('rules-notice-modal').classList.remove('hidden');
@@ -862,18 +855,19 @@
             btnHtml = `<button onclick="openProofModal(${task.id}, true)" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-[10px] font-bold text-white">Rejected (Retry)</button>`;
           } else {
             if (task.type === 'custom_proof') {
-              // Manual campaigns always show "Start" and open details popup
               btnHtml = `<button onclick="openProofModal(${task.id}, false)" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-[10px] font-bold text-white">Start</button>`;
             } else {
-              // Auto verifications immediately evaluate on list click
               btnHtml = `<button onclick="verifyTask(${task.id}, '${task.link}', '${task.type}', '${task.chat_id || ''}')" class="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-[10px] font-bold text-white">Verify</button>`;
             }
           }
 
+          // Renders custom_proof visually as "PREMIUM TASK" for a high-end interface feel
+          const displayedType = task.type === 'custom_proof' ? 'PREMIUM TASK' : task.type.replace('_', ' ');
+
           container.innerHTML += `
             <div class="glass-card p-4 flex items-center justify-between text-left">
               <div class="space-y-1 pr-2 flex-1">
-                <span class="text-[9px] uppercase tracking-wider text-cyan-400 font-bold">${task.type.replace('_', ' ')}</span>
+                <span class="text-[9px] uppercase tracking-wider text-cyan-400 font-bold">${displayedType}</span>
                 <h4 class="text-xs font-semibold text-white leading-normal">${task.title}</h4>
                 <p class="text-xs text-emerald-400 font-extrabold">+${task.reward} BDT</p>
               </div>
@@ -888,15 +882,15 @@
       }
     }
 
-    // Opens details modal instead of automatically redirecting
+    // Opens details modal
     async function openProofModal(taskId, isRetry = false) {
       document.getElementById('loader').classList.remove('hidden');
       try {
         const { data: task } = await supabaseClient.from('tasks').select('*').eq('id', taskId).single();
         if(!task) return;
 
-        globalActiveTask = task; // Set target active context
-        selectedBoxFiles = {};   // Reset box inputs selection cache
+        globalActiveTask = task; 
+        selectedBoxFiles = {};   
 
         if (isRetry) {
           const { data: ut } = await supabaseClient.from('user_tasks')
@@ -916,20 +910,27 @@
         document.getElementById('proof-info-input').placeholder = `যেমন: ${task.required_info_label || 'UID / Phone number'}`;
         document.getElementById('proof-info-input').value = "";
 
-        // Render Tutorials Image Boxes
+        // Render Tutorial Image Boxes (Supports up to 5 tutorial screenshots)
         const tutorialContainer = document.getElementById('proof-tutorials-container');
         const tutorialsList = document.getElementById('proof-tutorials-list');
         tutorialsList.innerHTML = "";
 
-        const tutorialImgs = [task.tutorial_img1, task.tutorial_img2, task.tutorial_img3].filter(Boolean);
+        const tutorialImgs = [
+          task.tutorial_img1, 
+          task.tutorial_img2, 
+          task.tutorial_img3,
+          task.tutorial_img4,
+          task.tutorial_img5
+        ].filter(Boolean);
+
         if (tutorialImgs.length > 0) {
           tutorialContainer.classList.remove('hidden');
           tutorialImgs.forEach((src, idx) => {
             tutorialsList.innerHTML += `
-              <div onclick="previewImage('${src}')" class="h-16 rounded-xl border border-white/5 bg-black/40 overflow-hidden cursor-pointer relative group flex items-center justify-center">
+              <div onclick="previewImage('${src}')" class="h-10 rounded-lg border border-white/5 bg-black/40 overflow-hidden cursor-pointer relative group flex items-center justify-center">
                 <img src="${src}" class="w-full h-full object-cover group-hover:scale-105 transition-transform" alt="Tutorial">
                 <div class="absolute inset-0 bg-black/30 flex items-center justify-center">
-                  <i data-lucide="zoom-in" class="w-4 h-4 text-white opacity-60"></i>
+                  <i data-lucide="zoom-in" class="w-3 h-3 text-white opacity-60"></i>
                 </div>
               </div>
             `;
@@ -969,7 +970,7 @@
       document.getElementById('proof-modal').classList.add('hidden');
     }
 
-    // Opens target URL ONLY when clicked explicitly inside the detail modal dashboard
+    // Opens target URL inside dashboard
     function openTargetTaskLink() {
       if (globalActiveTask && globalActiveTask.link) {
         window.open(globalActiveTask.link, '_blank');
@@ -984,7 +985,7 @@
       if (input) input.click();
     }
 
-    // Compresses Base64 payloads to completely eliminate size/limit errors ("সিস্টেম ত্রুটি ঘটেছে")
+    // Compresses Base64 payloads
     function compressImage(file, maxWidth = 600) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -1004,7 +1005,7 @@
             }
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL('image/jpeg', 0.7)); // 70% quality jpeg compression
+            resolve(canvas.toDataURL('image/jpeg', 0.7)); 
           };
           img.onerror = (err) => reject(err);
         };
@@ -1099,11 +1100,9 @@
       setTimeout(async () => {
         try {
           let success = true;
-          // Strictly verify if the task belongs to Telegram network (channel join/group join)
           if(type === 'tg_join' || type === 'tg_group' || (chatId && chatId.trim() !== '')) {
             success = await checkTelegramMembership(chatId, currentUser.telegram_id, link);
           } else {
-            // Non telegram task bypass for social sites (Web URL clicks, YouTube subs, FB follows)
             success = true;
           }
 
@@ -1218,7 +1217,6 @@
       const amount = parseFloat(document.getElementById('withdraw-amount').value);
       const minLimit = parseFloat(cachedSettings['min_withdraw'] || '50');
 
-      // Restriction: Minimal 2 referrals are strictly required to request payouts
       if (currentUser.ref_count < 2) {
         showToast("টাকা তুলতে হলে কমপক্ষে ২ টি সফল রেফার করা আবশ্যক!");
         alert("ভেরিফিকেশন এরর!\nটাকা তুলতে হলে আপনার অধীনে কমপক্ষে ২ টি সফল রেফার থাকতে হবে। অনুগ্রহ করে রেফার করুন ও পুনরায় চেষ্টা করুন।");
@@ -1301,7 +1299,7 @@
       }
     }
 
-    // Load Leaderboard based on TOTAL INCOME earned (কে কত টাকা ইনকাম করেছে)
+    // Load Leaderboard
     async function loadLeaderboard() {
       try {
         const { data: topUsers } = await supabaseClient.from('users')
