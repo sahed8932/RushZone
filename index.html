@@ -290,7 +290,7 @@
       </div>
     </div>
 
-    <!-- Tab 5: Profile & Leaderboard (Final Tab) -->
+    <!-- Tab 5: Profile & Leaderboard -->
     <div id="tab-profile" class="hidden space-y-6 text-left">
       <!-- Leaderboard -->
       <div class="glass-card p-4 space-y-4">
@@ -318,32 +318,40 @@
       <button onclick="closeProofModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white">
         <i data-lucide="x" class="w-5 h-5"></i>
       </button>
-      <h3 id="proof-task-title" class="text-base font-bold text-white">টাস্ক প্রুফ জমা দিন</h3>
+      <h3 id="proof-task-title" class="text-base font-bold text-white">টাস্ক ড্যাশবোর্ড ও প্রুফ</h3>
       
+      <!-- Instructions Box -->
       <div class="space-y-2 bg-black/30 p-3 rounded-xl border border-white/5">
         <p class="text-[10px] text-cyan-400 font-bold uppercase">নির্দেশনা:</p>
         <p id="proof-task-instruction" class="text-gray-300 text-xs leading-relaxed whitespace-pre-line"></p>
       </div>
 
-      <!-- Tutorial Instructions Screenshots -->
+      <!-- Live Go-Task Action Link (Opened only when user explicitly clicks inside modal) -->
+      <div class="p-1">
+        <button id="proof-go-task-btn" onclick="openTargetTaskLink()" class="w-full py-3 rounded-xl border border-dashed border-cyan-500 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-bold text-xs flex items-center justify-center gap-2 transition-all">
+          <i data-lucide="external-link" class="w-4 h-4"></i> কাজের লিংকে যান (Go Task)
+        </button>
+      </div>
+
+      <!-- Tutorial Instructions Box-Style Screenshots -->
       <div id="proof-tutorials-container" class="space-y-2 hidden">
-        <p class="text-[10px] text-cyan-400 font-bold uppercase">টিউটোরিয়াল স্ক্রিনশট (যা দেখে বুঝবেন):</p>
+        <p class="text-[10px] text-cyan-400 font-bold uppercase">টিউটোরিয়াল স্ক্রিনশট (যা দেখে কাজ বুঝবেন):</p>
         <div id="proof-tutorials-list" class="grid grid-cols-3 gap-2">
-          <!-- Dynamic Img tags -->
+          <!-- Custom Tutorial Boxes Rendered Dynamically -->
         </div>
       </div>
 
       <form id="proof-submit-form" onsubmit="submitProofAction(event)" class="space-y-4">
         <input type="hidden" id="proof-task-id">
         
-        <!-- Dynamic Screenshot Inputs -->
-        <div id="proof-screenshots-container" class="space-y-3">
-          <!-- Dynamic inputs rendered through javascript -->
+        <!-- Box-style Custom Upload Selector Container -->
+        <div id="proof-screenshots-container" class="grid grid-cols-1 gap-3">
+          <!-- Renders beautiful upload boxes -->
         </div>
 
         <!-- Custom Input field -->
         <div class="space-y-1">
-          <label id="proof-info-label" class="text-[10px] text-gray-400">প্রয়োজনীয় তথ্য</label>
+          <label id="proof-info-label" class="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">প্রয়োজনীয় তথ্য</label>
           <textarea id="proof-info-input" required rows="2" class="w-full bg-black/40 border border-white/5 p-3 rounded-xl text-xs outline-none text-white resize-none" placeholder="রেজিস্ট্রেশন নম্বর এবং ইউজার আইডি টাইপ করুন"></textarea>
         </div>
 
@@ -394,6 +402,8 @@
     let currentUser = null;
     let selectedMethod = "bKash";
     let cachedSettings = {};
+    let globalActiveTask = null; // Caches open active task context
+    let selectedBoxFiles = {};  // Caches loaded screenshots base64 state
 
     // Generate lightweight fingerprint
     function getDeviceFingerprint() {
@@ -852,8 +862,10 @@
             btnHtml = `<button onclick="openProofModal(${task.id}, true)" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-[10px] font-bold text-white">Rejected (Retry)</button>`;
           } else {
             if (task.type === 'custom_proof') {
-              btnHtml = `<button onclick="openProofModal(${task.id}, false)" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-[10px] font-bold text-white">Submit Proof</button>`;
+              // Manual campaigns always show "Start" and open details popup
+              btnHtml = `<button onclick="openProofModal(${task.id}, false)" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-[10px] font-bold text-white">Start</button>`;
             } else {
+              // Auto verifications immediately evaluate on list click
               btnHtml = `<button onclick="verifyTask(${task.id}, '${task.link}', '${task.type}', '${task.chat_id || ''}')" class="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-[10px] font-bold text-white">Verify</button>`;
             }
           }
@@ -876,12 +888,15 @@
       }
     }
 
-    // Open Proof Submission Modal
+    // Opens details modal instead of automatically redirecting
     async function openProofModal(taskId, isRetry = false) {
       document.getElementById('loader').classList.remove('hidden');
       try {
         const { data: task } = await supabaseClient.from('tasks').select('*').eq('id', taskId).single();
         if(!task) return;
+
+        globalActiveTask = task; // Set target active context
+        selectedBoxFiles = {};   // Reset box inputs selection cache
 
         if (isRetry) {
           const { data: ut } = await supabaseClient.from('user_tasks')
@@ -896,12 +911,12 @@
 
         document.getElementById('proof-task-id').value = task.id;
         document.getElementById('proof-task-title').innerText = task.title;
-        document.getElementById('proof-task-instruction').innerText = task.instruction || "লিংকে ক্লিক করে কাজ সম্পন্ন করুন এবং স্ক্রিনশট জমা দিন।";
-        document.getElementById('proof-info-label').innerText = task.required_info_label || "আপনার অ্যাকাউন্ট তথ্য";
-        document.getElementById('proof-info-input').placeholder = `যেমন: ${task.required_info_label || 'UID / Register Number'}`;
+        document.getElementById('proof-task-instruction').innerText = task.instruction || "কাজের নিয়মাবলি বিস্তারিত পড়ে প্রুফ জমা দিন।";
+        document.getElementById('proof-info-label').innerText = task.required_info_label || "প্রয়োজনীয় তথ্য দিন";
+        document.getElementById('proof-info-input').placeholder = `যেমন: ${task.required_info_label || 'UID / Phone number'}`;
         document.getElementById('proof-info-input').value = "";
 
-        // Handle Tutorials Images
+        // Render Tutorials Image Boxes
         const tutorialContainer = document.getElementById('proof-tutorials-container');
         const tutorialsList = document.getElementById('proof-tutorials-list');
         tutorialsList.innerHTML = "";
@@ -909,31 +924,36 @@
         const tutorialImgs = [task.tutorial_img1, task.tutorial_img2, task.tutorial_img3].filter(Boolean);
         if (tutorialImgs.length > 0) {
           tutorialContainer.classList.remove('hidden');
-          tutorialImgs.forEach(src => {
+          tutorialImgs.forEach((src, idx) => {
             tutorialsList.innerHTML += `
-              <img src="${src}" onclick="previewImage('${src}')" class="w-full h-16 object-cover rounded-lg border border-white/10 cursor-pointer hover:opacity-85" alt="Tutorial">
+              <div onclick="previewImage('${src}')" class="h-16 rounded-xl border border-white/5 bg-black/40 overflow-hidden cursor-pointer relative group flex items-center justify-center">
+                <img src="${src}" class="w-full h-full object-cover group-hover:scale-105 transition-transform" alt="Tutorial">
+                <div class="absolute inset-0 bg-black/30 flex items-center justify-center">
+                  <i data-lucide="zoom-in" class="w-4 h-4 text-white opacity-60"></i>
+                </div>
+              </div>
             `;
           });
         } else {
           tutorialContainer.classList.add('hidden');
         }
 
-        // Handle ScreenShot File Inputs
+        // Render Box-style screenshot upload fields
         const ssCount = parseInt(task.required_screenshots || 1);
         const ssContainer = document.getElementById('proof-screenshots-container');
         ssContainer.innerHTML = "";
         for (let i = 1; i <= ssCount; i++) {
           ssContainer.innerHTML += `
-            <div class="space-y-1">
-              <label class="text-[10px] text-gray-400">স্ক্রিনশট ${i} আপলোড করুন *</label>
-              <input type="file" accept="image/*" id="proof-ss-input-${i}" required class="w-full bg-black/40 border border-white/5 p-2 rounded-xl text-xs text-gray-400 outline-none">
+            <div onclick="triggerBoxUpload(${i})" class="flex flex-col items-center justify-center border-2 border-dashed border-cyan-500/20 bg-black/40 rounded-2xl p-4 text-center cursor-pointer hover:border-cyan-500/50 transition-all relative h-28 overflow-hidden group">
+              <input type="file" accept="image/*" id="proof-ss-input-${i}" class="hidden" onchange="handleBoxFileChange(this, ${i})">
+              <div id="box-placeholder-${i}" class="flex flex-col items-center justify-center space-y-1">
+                <i data-lucide="image-up" class="w-7 h-7 text-cyan-400 group-hover:scale-110 transition-transform"></i>
+                <p class="text-[10px] text-gray-300 font-bold">স্ক্রিনশট ${i} আপলোড করতে ক্লিক করুন *</p>
+                <p class="text-[8px] text-gray-500 font-medium">PNG, JPG formats supported</p>
+              </div>
+              <img id="box-preview-${i}" class="hidden absolute inset-0 w-full h-full object-cover rounded-2xl" alt="Preview">
             </div>
           `;
-        }
-
-        // Open Target Link in browser first
-        if (task.link) {
-          window.open(task.link, '_blank');
         }
 
         document.getElementById('proof-modal').classList.remove('hidden');
@@ -949,14 +969,68 @@
       document.getElementById('proof-modal').classList.add('hidden');
     }
 
-    // Convert file to Base64
-    function convertFileToBase64(file) {
+    // Opens target URL ONLY when clicked explicitly inside the detail modal dashboard
+    function openTargetTaskLink() {
+      if (globalActiveTask && globalActiveTask.link) {
+        window.open(globalActiveTask.link, '_blank');
+      } else {
+        showToast("কোনো লিংক পাওয়া যায়নি!");
+      }
+    }
+
+    // Triggers file selector click on custom boxes
+    function triggerBoxUpload(i) {
+      const input = document.getElementById(`proof-ss-input-${i}`);
+      if (input) input.click();
+    }
+
+    // Compresses Base64 payloads to completely eliminate size/limit errors ("সিস্টেম ত্রুটি ঘটেছে")
+    function compressImage(file, maxWidth = 600) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = err => reject(err);
         reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const scale = maxWidth / img.width;
+            if (img.width > maxWidth) {
+              canvas.width = maxWidth;
+              canvas.height = img.height * scale;
+            } else {
+              canvas.width = img.width;
+              canvas.height = img.height;
+            }
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.7)); // 70% quality jpeg compression
+          };
+          img.onerror = (err) => reject(err);
+        };
+        reader.onerror = (err) => reject(err);
       });
+    }
+
+    // Handles live file selection preview
+    async function handleBoxFileChange(input, idx) {
+      if (input.files && input.files[0]) {
+        try {
+          const compressedBase64 = await compressImage(input.files[0]);
+          selectedBoxFiles[idx] = compressedBase64;
+
+          const previewImg = document.getElementById(`box-preview-${idx}`);
+          const placeholder = document.getElementById(`box-placeholder-${idx}`);
+          if (previewImg && placeholder) {
+            previewImg.src = compressedBase64;
+            previewImg.classList.remove('hidden');
+            placeholder.classList.add('hidden');
+          }
+        } catch (e) {
+          console.error("Image loading failed: ", e);
+          showToast("ছবি লোড করতে সমস্যা হয়েছে!");
+        }
+      }
     }
 
     // Submit Custom Proof Action
@@ -965,19 +1039,16 @@
       const taskId = parseInt(document.getElementById('proof-task-id').value);
       const proofInfo = document.getElementById('proof-info-input').value.trim();
 
+      const ssCount = parseInt((globalActiveTask && globalActiveTask.required_screenshots) || 1);
+
       document.getElementById('loader').classList.remove('hidden');
       try {
-        const { data: task } = await supabaseClient.from('tasks').select('required_screenshots').eq('id', taskId).single();
-        const ssCount = parseInt((task && task.required_screenshots) || 1);
-
         const screenshots = [];
         for (let i = 1; i <= ssCount; i++) {
-          const fileInput = document.getElementById(`proof-ss-input-${i}`);
-          if (fileInput && fileInput.files[0]) {
-            const b64 = await convertFileToBase64(fileInput.files[0]);
-            screenshots.push(b64);
+          if (selectedBoxFiles[i]) {
+            screenshots.push(selectedBoxFiles[i]);
           } else {
-            showToast(`দয়া করে স্ক্রিনশট ${i} নির্বাচন করুন!`);
+            showToast(`দয়া করে স্ক্রিনশট ${i} বক্সে আপলোড করুন!`);
             document.getElementById('loader').classList.add('hidden');
             return;
           }
@@ -994,11 +1065,11 @@
         }, { onConflict: 'telegram_id,task_id' });
 
         if (!error) {
-          showToast("প্রুফ জমা দেওয়া হয়েছে! এডমিন শীঘ্রই যাচাই করবে।");
+          showToast("প্রুফ সফলভাবে জমা দেওয়া হয়েছে!");
           closeProofModal();
           await syncSystemState();
         } else {
-          showToast("প্রুফ সাবমিট করা ব্যর্থ হয়েছে! আবার চেষ্টা করুন।");
+          showToast("প্রুফ সাবমিট ব্যর্থ! পুনরায় চেষ্টা করুন।");
           console.error(error);
         }
       } catch (err) {
